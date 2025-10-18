@@ -369,11 +369,10 @@ class MessageContent extends StatelessWidget {
                     //og:description can also be used if the sender sent only link?
                     final desc = d?.tryGet<String>('og:title');
                     event.content['description'] =
-                    desc != null ? desc + '\n\n' + s : s;
+                    desc != null ? (desc.characters.length > 200 ? '$s\n\n${desc.characters.take(200)}...' : '$s\n\n$desc') : s;
 
                     return ImageBubble(
                       event,
-                      width: width,
                       height: height,
                       fit: BoxFit.contain,
                       borderRadius: borderRadius,
