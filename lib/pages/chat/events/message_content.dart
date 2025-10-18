@@ -255,16 +255,34 @@ class MessageContent extends StatelessWidget {
                 },
               );
             }
+            final bigEmotes = event.onlyEmotes &&
+                event.numberEmotes > 0 &&
+                event.numberEmotes <= 3;
+
+            // Find all custom emoji <img> elements and replace the height value where needed.
+            var formattedText = event.formattedText;
+            if (event.numberEmotes > 0) {
+              var emojiPixels = 64;
+              if (bigEmotes) {
+                emojiPixels = 96;
+              }
+              final formatTextSplit = event.formattedText.split("<img");
+              for (var i = 0; i < formatTextSplit.length; i++) {
+                formatTextSplit[i] = formatTextSplit[i].replaceAllMapped(
+                  RegExp(r'(.*data-mx-emoticon.*)height="\d+"(.+?/>)'),
+                  (match) =>
+                      '${match.group(1)}height="$emojiPixels"${match.group(2)}',
+                );
+              }
+              formattedText = formatTextSplit.join("<img");
+            }
+
             var html = AppConfig.renderHtml && event.isRichMessage
-                ? event.formattedText
+                ? formattedText
                 : event.body;
             if (event.messageType == MessageTypes.Emote) {
               html = '* $html';
             }
-
-            final bigEmotes = event.onlyEmotes &&
-                event.numberEmotes > 0 &&
-                event.numberEmotes <= 3;
             return Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
