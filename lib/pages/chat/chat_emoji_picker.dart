@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart';
 
 import 'package:fluffychat/config/themes.dart';
@@ -84,21 +87,24 @@ class ChatEmojiPicker extends StatelessWidget {
                           },
                         ),
                         GifPickerDialog(
-                          onSelected: (gif) {
-                            controller.room.sendEvent(
-                              {
-                                'body':
-                                    gif.title.isNotEmpty ? gif.title : 'GIF',
-                                'info': {
-                                  'mimetype': 'image/gif',
-                                  'w': gif.width,
-                                  'h': gif.height,
-                                  'size': null,
-                                },
-                                'url': gif.url,
-                              },
-                              type: EventTypes.Sticker,
-                            );
+                          onSelected: (gif) async {
+                            try {
+                              final data = await fetchGifBytes(gif.url);
+                              final file = MatrixFile(
+                                mimeType: 'image/gif',
+                                bytes: data,
+                                name: gif.url.split('/').last,
+                              );
+                              controller.room.sendFileEvent(
+                                file,
+                                shrinkImageMaxDimension: 1600,
+                              );
+                            } catch (e) {
+                              Logs().w(
+                                'Failed to download GIF from Tenor',
+                                e,
+                              );
+                            }
                             controller.hideEmojiPicker();
                           },
                         ),
@@ -128,5 +134,21 @@ class NoRecent extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+Future<Uint8List> fetchGifBytes(String url) async {
+  try {
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    } else {
+      throw Exception(
+        'Failed to load GIF. Status code: ${response.statusCode}',
+      );
+    }
+  } catch (e) {
+    throw Exception('Error fetching GIF: $e');
   }
 }
