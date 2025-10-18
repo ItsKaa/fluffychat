@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
 
 import 'package:matrix/matrix.dart';
 
@@ -130,10 +131,8 @@ class MessageContent extends StatelessWidget {
             if (w != null && h != null) {
               fit = BoxFit.contain;
               if (w > h) {
-                width = maxSize;
                 height = max(32, maxSize * (h / w));
               } else {
-                height = maxSize;
                 width = max(32, maxSize * (w / h));
               }
             }
@@ -283,34 +282,107 @@ class MessageContent extends StatelessWidget {
             if (event.messageType == MessageTypes.Emote) {
               html = '* $html';
             }
-            return Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              child: HtmlMessage(
-                html: html,
-                textColor: textColor,
-                room: event.room,
-                fontSize: AppConfig.fontSizeFactor *
-                    AppConfig.messageFontSize *
-                    (bigEmotes ? 5 : 1),
-                limitHeight: !selected,
+
+            final s = event.calcLocalizedBodyFallback(
+              MatrixLocals(L10n.of(context)),
+              hideReply: true,
+            );
+
+            if (!s.hasUrl) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: HtmlMessage(
+                  html: html,
+                  textColor: textColor,
+                  room: event.room,
+                  fontSize: AppConfig.fontSizeFactor *
+                      AppConfig.messageFontSize *
+                      (bigEmotes ? 5 : 1),
+                  limitHeight: !selected,
+                  linkStyle: TextStyle(
+                    color: linkColor,
+                    fontSize:
+                    AppConfig.fontSizeFactor * AppConfig.messageFontSize,
+                    decoration: TextDecoration.underline,
+                    decorationColor: linkColor,
+                  ),
+                  onOpen: (url) => UrlLauncher(context, url.url).launchUrl(),
+                  eventId: event.eventId,
+                  checkboxCheckedEvents: event.aggregatedEvents(
+                    timeline,
+                    EventCheckboxRoomExtension.relationshipType,
+                  ),
+                ),
+              );
+            }
+            else {
+              final defContent = Linkify(
+                text: s,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: bigEmotes ? fontSize * 5 : fontSize,
+                  decoration: event.redacted ? TextDecoration.lineThrough : null,
+                ),
+                options: const LinkifyOptions(humanize: false),
                 linkStyle: TextStyle(
                   color: linkColor,
-                  fontSize:
-                      AppConfig.fontSizeFactor * AppConfig.messageFontSize,
+                  fontSize: fontSize,
                   decoration: TextDecoration.underline,
                   decorationColor: linkColor,
                 ),
                 onOpen: (url) => UrlLauncher(context, url.url).launchUrl(),
-                eventId: event.eventId,
-                checkboxCheckedEvents: event.aggregatedEvents(
-                  timeline,
-                  EventCheckboxRoomExtension.relationshipType,
-                ),
-              ),
-            );
+              );
+              final url = s.urlMatch;
+              return FutureBuilder<Map<String, Object?>?>(
+                  future: Matrix
+                      .of(context)
+                      .client
+                      .request(
+                      RequestType.GET, '/client/v1/media/preview_url',
+                      query: {'url': url}),
+                  builder: (context, snapshot) {
+                    final d = snapshot.data ?? {};
+                    if (!d.containsKey('og:image')) {
+                      //present the regular text message until we have an image
+                      return defContent;
+                    }
+
+                    const maxSize = 256.0;
+                    final w = d?.tryGet<int>('og:image:width');
+                    final h = d?.tryGet<int>('og:image:height');
+                    var width = maxSize;
+                    var height = maxSize;
+                    if (w != null && h != null) {
+                      if (w > h) {
+                        height = max(32, maxSize * (h / w));
+                      } else {
+                        width = max(32, maxSize * (w / h));
+                      }
+                    }
+                    event.content['url'] = d['og:image'];
+                    event.content['width'] = width;
+                    event.content['height'] = height;
+
+                    //og:description can also be used if the sender sent only link?
+                    final desc = d?.tryGet<String>('og:title');
+                    event.content['description'] =
+                    desc != null ? desc + '\n\n' + s : s;
+
+                    return ImageBubble(
+                      event,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.contain,
+                      borderRadius: borderRadius,
+                      timeline: timeline,
+                      textColor: textColor,
+                      onTap: () => UrlLauncher(context, url).launchUrl(),
+                    );
+                  });
+            }
         }
       case EventTypes.CallInvite:
         return FutureBuilder<User?>(
@@ -383,4 +455,12 @@ class _ButtonContent extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on String {
+  static final RegExp _urlRegex = RegExp(
+      r'(http|ftp|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])');
+
+  bool get hasUrl => _urlRegex.hasMatch(this);
+  String? get urlMatch => _urlRegex.firstMatch(this)?.group(0);
 }
