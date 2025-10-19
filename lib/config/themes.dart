@@ -11,13 +11,13 @@ abstract class FluffyThemes {
   static const double navRailWidth = 80.0;
 
   static bool isColumnModeByWidth(double width) =>
-      width > columnWidth * 2 + navRailWidth;
+      width > columnWidth * 1.5 + navRailWidth;
 
   static bool isColumnMode(BuildContext context) =>
       isColumnModeByWidth(MediaQuery.sizeOf(context).width);
 
   static bool isThreeColumnMode(BuildContext context) =>
-      MediaQuery.sizeOf(context).width > FluffyThemes.columnWidth * 3.5;
+      MediaQuery.sizeOf(context).width > FluffyThemes.columnWidth * 2.5;
 
   static LinearGradient backgroundGradient(
     BuildContext context,
